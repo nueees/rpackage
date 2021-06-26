@@ -11,3 +11,7 @@ str(full)
 summary(full)
 
 
+head(full)
+
+full$survived <- ifelse(full$survived == 1, "Y", "N")
+full$Survived %<>% as.factor()
