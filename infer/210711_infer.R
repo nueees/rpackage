@@ -1,5 +1,5 @@
 install.packages("statsr")
-library(infer);library(ggplot2);library(dplyr);library(statsr);
+library(infer);library(ggplot2);library(dplyr);library(statsr);library(dplyr);
 
 
 # [infer 기본 사용]
@@ -8,6 +8,59 @@ library(infer);library(ggplot2);library(dplyr);library(statsr);
 # 3.귀무가설을 hypothesize 함수에서 적시한다.
 # 4.컴퓨터에서 모의실험 난수를 generate에서 생성시킨다.
 # 5.검정 통계량을 calculate 함수에 명시한다.
+
+
+
+#######################icecream###############################
+
+# 가장 간단하게 0523 지은님 아이스크림 코드로 검증.
+#setwd("C:/Users/Administrator/Documents/R/BDA/210523")
+icecream <- read.csv("Ch0701.OST.csv", stringsAsFactors=TRUE, encoding="UTF-8")
+str(icecream)
+summary(icecream)
+
+icecream.r <- round(icecream$weight,1)
+install.packages("ggplot2")
+library(ggplot2)
+boxplot(icecream.r)
+hist(icecream.r)
+
+# 1.2 평균 아이스크림 무게가 320g과 같은지 검정하고 그 결과를 print함수로 출력하라.(양측검정, 유의수준 0.05)
+icecream.t <- t.test(icecream, alternative="two.sided", mu=290, conf.level=0.95)
+print(icecream.t) # 귀무가설(평균320)
+
+
+### tidyverse로 기본적인 통계검정
+icecream %>% 
+  t_test(response=weight,alternative="two.sided", mu=290, conf_level=0.95)
+# p_value ; 0.00778 귀무 기각
+
+# find the point estimate 추정치 확인
+estmt_ice <- icecream %>% specify(response=weight) %>% 
+  calculate(stat="mean")
+# estmt_ice ; 295 (mean(icecream$weight))
+
+
+## hypothesize 귀무가설 만들고
+null_ice<- icecream %>% specify(response=weight) %>% 
+  hypothesize(null="point", mu=290) %>% 
+  generate(reps=1000, type="bootstrap") %>% 
+  calculate(stat = "mean")
+
+## 그래프로 확인
+null_ice %>% visualise()
+null_ice %>% visualise()+shade_p_value(obs_stat=estmt_ice, direction="two-sided")
+pvalue_ice <- null_ice %>% get_p_value(obs_stat=estmt_ice, direction="two-sided")
+# pvalue_ice ; 0.004 귀무가설 기각
+
+# calculate the confidence interval around the point estimate 95신뢰구간se
+null_ice %>%
+  get_confidence_interval(point_estimate = estmt_ice,
+                          # at the 95% confidence level
+                          level = .95,
+                          # using the standard error
+                          type = "se")
+# lower_ci ; 291, upper_ci ; 299
 
 
 
@@ -116,7 +169,7 @@ g2 <- drugstudy %>%
   filter(group == "control") %>% 
   select(time) %>%  pull
 
-t.test(g1, g2, conf.level = 0.95, alternative = "two.sided") #p:0.008251
+t.test(g1, g2, conf.level = 0.95, alternative = "two.sided") #p:0.008251 귀무가설 기각
 
 ### tidyverse 통계검정
 drugstudy %>% 
@@ -353,6 +406,42 @@ p_value <- null_dist %>%
   get_p_value(obs_stat = point_estimate, direction = "two-sided")
 
 p_value
+
+
+# start with the null distribution
+null_dist %>%
+  # calculate the confidence interval around the point estimate
+  get_confidence_interval(point_estimate = point_estimate,
+                          # at the 95% confidence level
+                          level = .95,
+                          # using the standard error
+                          type = "se")
+
+
+
+null_f_distn <- gss %>%
+  specify(age ~ partyid) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "F")
+
+null_f_distn_theoretical <- gss %>%
+  specify(age ~ partyid) %>%
+  hypothesize(null = "independence") %>%
+  calculate(stat = "F")
+
+F_hat <- gss %>% 
+  specify(age ~ partyid) %>%
+  calculate(stat = "F")
+
+visualize(null_f_distn_theoretical, method = "theoretical") +
+  shade_p_value(obs_stat = F_hat, direction = "greater")
+
+visualize(null_f_distn, method = "both") +
+  shade_p_value(obs_stat = F_hat, direction = "greater")
+
+
+
 
 
 
