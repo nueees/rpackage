@@ -1,9 +1,10 @@
-install.packages("statsr")
-library(infer);library(ggplot2);library(dplyr);library(statsr);library(dplyr);
+library(infer);library(ggplot2);library(dplyr);library(statsr);
 
+library(tidyverse);library(cowplot);library(extrafont);library(tidyr);library(caret);
+loadfonts();
 
 # [infer 기본 사용]
-# 1.코딩기반 t-검정을 수행할 경우 df이 δ∗에 해당되어 데이터에서 사전에 계산해 놓는다.
+# 1.코딩기반 t-검정을 수행할 경우 자유도가 delta(두샘플의 평균차이)∗어쩌구라서 사전에 계산해 놓는다.
 # 2.가설검정 공식을 specify 함수에 명세한다.
 # 3.귀무가설을 hypothesize 함수에서 적시한다.
 # 4.컴퓨터에서 모의실험 난수를 generate에서 생성시킨다.
@@ -14,14 +15,12 @@ library(infer);library(ggplot2);library(dplyr);library(statsr);library(dplyr);
 #######################icecream###############################
 
 # 가장 간단하게 0523 지은님 아이스크림 코드로 검증.
-#setwd("C:/Users/Administrator/Documents/R/BDA/210523")
+#setwd("C:/Users/Administrator/Documents/R/Kaggle/rpackage/data")
 icecream <- read.csv("Ch0701.OST.csv", stringsAsFactors=TRUE, encoding="UTF-8")
 str(icecream)
 summary(icecream)
 
 icecream.r <- round(icecream$weight,1)
-install.packages("ggplot2")
-library(ggplot2)
 boxplot(icecream.r)
 hist(icecream.r)
 
@@ -64,15 +63,51 @@ null_ice %>%
 
 
 
-#######################bankstudy###############################
+#######################bottle##################################
+
+bottles <- read.csv("bottles.csv", stringsAsFactors=TRUE, encoding="UTF-8")
+
+str(bottles)
+mean(bottles$Volume) #491.5750
+
+### tidyverse로 기본적인 통계검정
+bottles %>% 
+  t_test(response=Volume,alternative="two.sided", mu=500, conf_level=0.95)
+# p_value ; 0.145 귀무 기각
+
+# find the point estimate 추정치 확인
+estmt_bottles <- bottles %>% specify(response=Volume) %>% 
+  calculate(stat="mean")
+# estmt_bottles ; 492 (mean(icecream$weight))
 
 
-# 0. 환경설정 -----
-library(infer)
-library(tidyverse)
-library(cowplot)
-library(extrafont)
-loadfonts()
+## hypothesize 귀무가설 만들고
+null_bottles <- bottles %>% specify(response=Volume) %>% 
+  hypothesize(null="point", mu=500) %>% 
+  generate(reps=1000, type="bootstrap") %>% 
+  calculate(stat = "mean")
+
+## 그래프로 확인
+null_bottles %>% visualise()
+null_bottles %>% visualise()+shade_p_value(obs_stat=estmt_bottles, direction="two-sided")
+pvalue_bottles <- null_bottles %>% get_p_value(obs_stat=estmt_bottles, direction="two-sided")
+# pvalue_ice ; 0.004 귀무가설 기각
+
+# calculate the confidence interval around the point estimate 95신뢰구간se
+null_bottles %>%
+  get_confidence_interval(point_estimate = estmt_bottles,
+                          # at the 95% confidence level
+                          level = .95,
+                          # using the standard error
+                          type = "se")
+# lower_ci ; 481, upper_ci ; 502
+
+
+
+#######################bankstudy#######################
+# 두집단.독립
+
+
 
 # 1. 성차별(Gender Discrimination) -----
 ## 1.1. 데이터 -----
@@ -84,10 +119,12 @@ str(bankstudy)
 bankstudy %>% 
   count(promote, gender) %>% 
   spread(gender, n)
-
 bankstudy %>%
   group_by(gender) %>%
   summarize(promote_prob = mean(promote == "yes"))
+# gender promote_prob
+# female        0.583
+# male    
 
 ### 시각화
 bankstudy %>% 
@@ -104,17 +141,34 @@ bankstudy %>%
 
 
 ### tidyverse + 컴퓨팅 통계검정
-dsex_hat <- bankstudy %>%
-  group_by(gender) %>%
-  summarize(prob = mean(promote == "yes")) %>%
-  pull(prob) %>% diff()
+promote_y <- bankstudy %>%  group_by(gender) %>%
+  summarise(prob = mean(promote == "yes")) 
+dsex_hat <- promote_y %>% pull(prob) %>% diff()
+# 관측된 평균 차이 : 0.2916667
+
+?calculate
+# calculate(x,
+#   stat = c("mean", "median", "sum", "sd", "prop", "count", "diff in means","diff in medians", "diff in props", "Chisq", "F","slope", "correlation", "t", "z","ratio of props", "odds ratio"),
+#   order = NULL,
+#   ...)
+bank_null <- bankstudy %>%
+  specify(promote ~ gender, success = "yes") %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute")
+
+promote_y2 <- bank_null %>% group_by(gender) %>%  summarise(prob=mean(promote=="yes"))
+
+promote_y2 %>% pull(prob) %>% diff()
+# 가설 평균 차이 : 0.0045
 
 dsex_null <- bankstudy %>%
   specify(promote ~ gender, success = "yes") %>%
   hypothesize(null = "independence") %>%
   generate(reps = 1000, type = "permute") %>%
   calculate(stat = "diff in props", order = c("male", "female"))
+# 0.292, -0.0417, 0.208, -0.0417 ...
 
+# dsex_hat : 0.2916667
 ggplot(dsex_null, aes(x = stat)) +
   geom_density(bw=0.05) +
   geom_vline(xintercept = dsex_hat, color="red") +
@@ -123,26 +177,36 @@ ggplot(dsex_null, aes(x = stat)) +
 dsex_null %>%
   summarize(mean(stat > dsex_hat)) %>%
   pull() * 2 
+# 0.004 * 2
 
 ## 1.4. 신뢰구간 -----
 ### tidyverse + 컴퓨팅
-dsex_boot <- bankstudy %>%
-  specify(promote ~ gender, success = "yes") %>%
-  generate(reps = 1000, type = "bootstrap") %>%
-  calculate(stat = "diff in props", order = c("female", "male"))
+# dsex_boot <- bankstudy %>%
+#   specify(promote ~ gender, success = "yes") %>%
+#   generate(reps = 1000, type = "bootstrap") %>%
+#   calculate(stat = "diff in props", order = c("female", "male"))
+# 
+# c(lower = dsex_hat - 2 * sd(dsex_boot$stat), 
+#   upper = dsex_hat + 2 * sd(dsex_boot$stat))
 
-c(lower = dsex_hat - 2 * sd(dsex_boot$stat), 
-  upper = dsex_hat + 2 * sd(dsex_boot$stat))
+dsex_null %>%
+  get_confidence_interval(point_estimate = dsex_hat,
+                          # at the 95% confidence level
+                          level = .95,
+                          # using the standard error
+                          type = "se")
+#   lower_ci  upper_ci
+#   0.0477    0.536
 
 ### 전통적 방식
-n <- nrow(bankstudy)
-dsex_prop <- bankstudy %>%
-    group_by(gender) %>%
-    summarize(prob = mean(promote == "yes")) %>%
-    pull(prob)
-
-prop.test(x=c(dsex_prop[2], dsex_prop[1]) * n, n = c(n, n),  alternative = "two.sided", correct=FALSE) %>%
-    broom::tidy()
+# n <- nrow(bankstudy)
+# dsex_prop <- bankstudy %>%
+#     group_by(gender) %>%
+#     summarize(prob = mean(promote == "yes")) %>%
+#     pull(prob)
+# 
+# prop.test(x=c(dsex_prop[2], dsex_prop[1]) * n, n = c(n, n),  alternative = "two.sided", correct=FALSE) %>%
+#     broom::tidy()
 
 
 
@@ -175,7 +239,7 @@ t.test(g1, g2, conf.level = 0.95, alternative = "two.sided") #p:0.008251 귀무�
 drugstudy %>% 
   t_test(time ~ group)
 
-
+str(drugstudy)
 ### tidyverse + 컴퓨팅 통계적 검정
 drug_diff_hat <- drugstudy %>%
   group_by(group) %>%
@@ -198,15 +262,20 @@ drug_null %>%
   pull() * 2
 
 ## 1.4. 신뢰구간 -----
-drug_boot <- drugstudy %>%
-  specify(time ~ group) %>%
-  generate(reps = 1000, type = "bootstrap") %>%
-  calculate(stat = "diff in means", order = c("treatment", "control")) 
-
-drug_boot[!complete.cases(drug_boot$stat),]
-c(lower = drug_diff_hat - 2 * sd(drug_boot$stat,na.rm=T), 
-  upper = drug_diff_hat + 2 * sd(drug_boot$stat,na.rm=T))
-
+# drug_boot <- drugstudy %>%
+#   specify(time ~ group) %>%
+#   generate(reps = 1000, type = "bootstrap") %>%
+#   calculate(stat = "diff in means", order = c("treatment", "control")) 
+# 
+# drug_boot[!complete.cases(drug_boot$stat),]
+# c(lower = drug_diff_hat - 2 * sd(drug_boot$stat,na.rm=T), 
+#   upper = drug_diff_hat + 2 * sd(drug_boot$stat,na.rm=T))
+drug_null %>%
+  get_confidence_interval(point_estimate=drug_diff_hat,
+                          # at the 95% confidence level
+                          level = .95,
+                          # using the standard error
+                          type = "se")
 
 
 
