@@ -39,11 +39,11 @@ estmt_ice <- icecream %>% specify(response=weight) %>%
   calculate(stat="mean")
 # estmt_ice ; 295 (mean(icecream$weight))
 
-
+str(icecream)
 ## hypothesize 귀무가설 만들고
-null_ice<- icecream %>% specify(response=weight) %>% 
+null_ice2<- icecream %>% specify(response=weight) %>% 
   hypothesize(null="point", mu=290) %>% 
-  generate(reps=1000, type="bootstrap") %>% 
+  generate(reps=1, type="bootstrap") %>% 
   calculate(stat = "mean")
 
 ## 그래프로 확인
@@ -124,7 +124,7 @@ bankstudy %>%
   summarize(promote_prob = mean(promote == "yes"))
 # gender promote_prob
 # female        0.583
-# male    
+# male          0.875
 
 ### 시각화
 bankstudy %>% 
@@ -145,7 +145,7 @@ promote_y <- bankstudy %>%  group_by(gender) %>%
   summarise(prob = mean(promote == "yes")) 
 dsex_hat <- promote_y %>% pull(prob) %>% diff()
 # 관측된 평균 차이 : 0.2916667
-
+ 
 ?calculate
 # calculate(x,
 #   stat = c("mean", "median", "sum", "sd", "prop", "count", "diff in means","diff in medians", "diff in props", "Chisq", "F","slope", "correlation", "t", "z","ratio of props", "odds ratio"),
@@ -159,7 +159,7 @@ bank_null <- bankstudy %>%
 promote_y2 <- bank_null %>% group_by(gender) %>%  summarise(prob=mean(promote=="yes"))
 
 promote_y2 %>% pull(prob) %>% diff()
-# 가설 평균 차이 : 0.0045
+# 가설 평균 차이 : ...
 
 dsex_null <- bankstudy %>%
   specify(promote ~ gender, success = "yes") %>%
@@ -276,20 +276,6 @@ drug_null %>%
                           level = .95,
                           # using the standard error
                           type = "se")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
